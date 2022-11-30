@@ -1,0 +1,62 @@
+main:
+  steps:
+  - init:
+      assign:
+      - projectId: ${sys.get_env("GOOGLE_CLOUD_PROJECT_ID")}
+      - projectNumber: ${sys.get_env("GOOGLE_CLOUD_PROJECT_NUMBER")}
+      - zone: "us-east1-b"
+      - machineType: "e2-micro"
+      - instanceName: "scraper-vm"
+  - log_vm_creation_start:
+      call: sys.log
+      args:
+        data: ${"Scraper logs:initializing VM"}
+  - create_and_start_vm:
+      call: googleapis.compute.v1.instances.insert
+      args:
+        project: ${projectId}
+        zone: ${zone}
+        body:
+          name: ${instanceName}
+          machineType: ${"zones/" + zone + "/machineTypes/" + machineType}
+          disks:
+          - initializeParams:
+              sourceImage: "projects/cos-cloud/global/images/cos-stable-93-16623-102-1"
+              diskSizeGb: "10"
+            boot: true
+            autoDelete: true
+          networkInterfaces:
+          - accessConfigs:
+            - kind: compute#accessConfig
+              name: "external-nat"
+              networkTier: "PREMIUM"
+          metadata:
+              items:
+              - key: "gce-container-declaration"
+                value: '${"spec:\n  containers:\n  - name: scraper\n    image: gcr.io/" + projectId + "/scraper\n    stdin: false\n    tty: false\n  restartPolicy: Always\n"}'
+              - key: "google-logging-enabled"
+                value: "true"
+              - key: "google-monitoring-enabled"
+                value: "true"
+          serviceAccounts:
+          - email: "service-account-name@project-id.iam.gserviceaccount.com"
+            scopes:
+            - https://www.googleapis.com/auth/devstorage.read_only
+            - https://www.googleapis.com/auth/logging.write
+            - https://www.googleapis.com/auth/monitoring.write
+            - https://www.googleapis.com/auth/servicecontrol
+            - https://www.googleapis.com/auth/service.management.readonly
+            - https://www.googleapis.com/auth/trace.append
+            - https://www.googleapis.com/auth/cloud-platform
+  - log_wait_for_vm_network:
+      call: sys.log
+      args:
+        data: ${"Scraper logs:Waiting for VM network to initialize"}
+  - wait_for_vm_network:
+      call: sys.sleep
+      args:
+          seconds: 10
+  - log_vm_creation_end:
+      call: sys.log
+      args:
+        data: ${"Scraper logs:VM initialized successfully"}

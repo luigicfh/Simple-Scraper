@@ -1,0 +1,7 @@
+{
+  "project_id": "string",
+  "zone": "string",
+  "instance_name": "string",
+  "bucket": "string",
+  "folder": "string"
+}
