@@ -24,23 +24,10 @@ def setup_env_variables():
     os.environ['FOLDER'] = to_dict['folder']
 
 
-def handle_exception(gce_client):
-    logging.error(LOG_MSG + traceback.format_exc())
-    try:
-        gce_client.delete(
-            project=os.environ.get('PROJECT_ID'),
-            zone=os.environ.get('ZONE'),
-            instance=os.environ.get('INSTANCE_NAME')
-        )
-    except NotFound:
-        pass
-
-
 def get_products() -> list[element.ResultSet]:
     product_list = []
     page = 1
-    response_ok = True
-    while response_ok:
+    while True:
         response = requests.get(url=PAGE_URL.format(page))
         if response.status_code != 200:
             break
@@ -51,6 +38,23 @@ def get_products() -> list[element.ResultSet]:
     return product_list
 
 
+def setup_logging():
+    logging_client = google.cloud.logging.Client()
+    logging_client.setup_logging()
+
+
+def delete_instance():
+    gce_client = compute_v1.InstancesClient()
+    try:
+        gce_client.delete(
+            project=os.environ.get('PROJECT_ID'),
+            zone=os.environ.get('ZONE'),
+            instance=os.environ.get('INSTANCE_NAME')
+        )
+    except NotFound:
+        pass
+
+
 def upload_to_gcs(data: str) -> None:
     gcs_client = storage.Client()
     bucket = gcs_client.get_bucket(os.environ.get("BUCKET"))
@@ -59,12 +63,15 @@ def upload_to_gcs(data: str) -> None:
     blob.upload_from_string(data=data, content_type="application/json")
 
 
-def scrape(gce_client) -> None:
+def handle_exception():
+    logging.error(LOG_MSG + traceback.format_exc())
+    delete_instance()
+
+
+def scrape() -> None:
     logging.info(
         LOG_MSG + f"scraping started {datetime.datetime.now().isoformat()}")
     book_products = get_products()
-    logging.info(
-        LOG_MSG + f"website scraped {datetime.datetime.now().isoformat()}")
     d = {}
     data = []
     logging.info(
@@ -87,22 +94,13 @@ def scrape(gce_client) -> None:
     upload_to_gcs(to_json)
     logging.info(
         LOG_MSG + f"scraping process finished, deleting instance {datetime.datetime.now().isoformat()}")
-    try:
-        gce_client.delete(
-            project=os.environ.get('PROJECT_ID'),
-            zone=os.environ.get('ZONE'),
-            instance=os.environ.get('INSTANCE_NAME')
-        )
-    except NotFound:
-        pass
+    delete_instance()
 
 
 if __name__ == '__main__':
     setup_env_variables()
-    logging_client = google.cloud.logging.Client()
-    logging_client.setup_logging()
-    gce_client = compute_v1.InstancesClient()
+    setup_logging()
     try:
-        scrape(gce_client)
+        scrape()
     except Exception:
-        handle_exception(gce_client)
+        handle_exception()
