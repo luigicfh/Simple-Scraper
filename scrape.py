@@ -14,7 +14,7 @@ PAGE_URL = BASE_URL + '/catalogue/page-{}.html'
 LOG_MSG = "Scraper logs: "
 
 
-def setup_env_variables():
+def setup_env_variables() -> None:
     with open('config.json') as file:
         to_dict = json.loads(file.read())
     os.environ['PROJECT_ID'] = to_dict['project_id']
@@ -38,12 +38,12 @@ def get_products() -> list[element.ResultSet]:
     return product_list
 
 
-def setup_logging():
+def setup_logging() -> None:
     logging_client = google.cloud.logging.Client()
     logging_client.setup_logging()
 
 
-def delete_instance():
+def delete_instance() -> None:
     gce_client = compute_v1.InstancesClient()
     try:
         gce_client.delete(
@@ -59,24 +59,18 @@ def upload_to_gcs(data: str) -> None:
     gcs_client = storage.Client()
     bucket = gcs_client.get_bucket(os.environ.get("BUCKET"))
     blob = bucket.blob(f"{os.environ.get('FOLDER')}/results.json")
-    blob._chunk_size = 8388608  # 1024 * 1024 B * 16 = 8 MB
     blob.upload_from_string(data=data, content_type="application/json")
 
 
-def handle_exception():
+def handle_exception() -> None:
     logging.error(LOG_MSG + traceback.format_exc())
     delete_instance()
 
 
-def scrape() -> None:
-    logging.info(
-        LOG_MSG + f"scraping started {datetime.datetime.now().isoformat()}")
-    book_products = get_products()
+def to_list(products: list[element.ResultSet]) -> list[dict]:
     d = {}
     data = []
-    logging.info(
-        LOG_MSG + f"transforming data {datetime.datetime.now().isoformat()}")
-    for product in book_products:
+    for product in products:
         d['book_title'] = product[0].find('h3').find('a')['title']
         d['image'] = BASE_URL + product[0].find(attrs={'class': 'image_container'}).find(
             'a').find('img')['src'].replace("..", '')
@@ -88,7 +82,17 @@ def scrape() -> None:
             'class'][-1]
         data.append(d)
         d = {}
-    to_json = json.dumps(data, indent=4)
+    return data
+
+
+def scrape() -> None:
+    logging.info(
+        LOG_MSG + f"scraping started {datetime.datetime.now().isoformat()}")
+    book_products = get_products()
+    logging.info(
+        LOG_MSG + f"transforming data {datetime.datetime.now().isoformat()}")
+    data_list = to_list(book_products)
+    to_json = json.dumps(data_list, indent=4)
     logging.info(
         LOG_MSG + f"uploading file {datetime.datetime.now().isoformat()}")
     upload_to_gcs(to_json)
