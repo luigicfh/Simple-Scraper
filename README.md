@@ -1,2 +1,2 @@
 # scraper
- Small python used to scrape https://books.toscrape.com/
+ Small python program used to scrape https://books.toscrape.com/
